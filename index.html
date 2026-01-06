@@ -1,167 +1,319 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PDF Flipbook</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Offline PDF Flipbook — Single Page View</title>
 
 <style>
-  body {
-    margin: 0;
-    background: #2b2b2b;
-    font-family: Arial, sans-serif;
-    overflow: hidden;
+  :root{
+    --bg: #121217;
+    --card: #0f1720;
+    --accent: #06b6d4;
+    --muted: rgba(255,255,255,0.65);
+    --gap: 18px;
+    --pad: 18px;
+  }
+  html,body{height:100%;}
+  body{
+    margin:0;
+    font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+    background:linear-gradient(180deg,var(--bg) 0%, #0b0b0d 100%);
+    color:#fff;
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+    display:flex;
+    align-items:center;
+    justify-content:center;
   }
 
-  #viewerWrapper {
-    width: 100vw;
-    height: 100vh;
-    display: flex;
-    justify-content: center;
-    align-items: center;
+  .stage{
+    width:100vw;
+    height:100vh;
+    padding:0;
+    box-sizing:border-box;
+    display:flex;
+    align-items:stretch;
+    justify-content:stretch;
   }
 
-  #flipbook {
-    background: transparent;
+  /* The card that holds the flipbook */
+  .viewer-card{
+    flex:1 1 auto;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background: #000;
+    border-radius:0;
+    padding:0;
+    box-shadow:none;
+    position:relative;
+    overflow:hidden;
   }
 
-  .page {
-    background: #fff;
-    overflow: hidden;
-    display: flex;
-    justify-content: center;
-    align-items: center;
+  /* Flipbook container (turn.js requires a wrapper element) */
+  #flipbook{
+    background:transparent;
+    border-radius:10px;
+    overflow:visible;
+    display:flex;
+    align-items:center;
+    justify-content:center;
   }
 
-  canvas {
-    width: 100%;
-    height: 100%;
-    display: block;
+  .page{
+    background:#fff;
+    border-radius:8px;
+    box-shadow: 0 8px 20px rgba(2,6,23,0.45);
+    overflow:hidden;
+    width:100%;
+    height:100%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
   }
 
-  #prevBtn, #nextBtn {
-    position: fixed;
-    top: 10%;
-    padding: 12px 18px;
-    font-size: 16px;
-    cursor: pointer;
-    background: #fff;
-    border: none;
-    box-shadow: 0 2px 10px rgba(0,0,0,.4);
-    z-index: 1000;
+  canvas{display:block; width:100%; height:100%;}
+
+  /* Controls */
+  .control{
+    position: absolute;
+    top:50%;
+    transform:translateY(-50%);
+    background: rgba(255,255,255,0.06);
+    border:1px solid rgba(255,255,255,0.06);
+    color:var(--muted);
+    padding:14px 12px;
+    border-radius:10px;
+    backdrop-filter: blur(6px);
+    cursor:pointer;
+    user-select:none;
+  }
+  #prevBtn{left:12px}
+  #nextBtn{right:12px}
+  .control:hover{background:rgba(255,255,255,0.08); color:#fff}
+
+  .topbar{
+    position:absolute;
+    left:var(--pad);
+    right:var(--pad);
+    top:var(--pad);
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    pointer-events:none;
+  }
+  .topbar .label{pointer-events:auto}
+
+  .page-indicator{
+    font-size:13px;
+    color:var(--muted);
+    background:rgba(0,0,0,0.25);
+    padding:6px 10px;
+    border-radius:8px;
+    backdrop-filter:blur(6px);
   }
 
-  #prevBtn { left: 20px; }
-  #nextBtn { right: 20px; }
+  .loader{
+    position:absolute;
+    inset:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    pointer-events:none;
+  }
+
+  .meta{display:none}
+
+  /* Responsive tweaks */
+  @media (max-width:900px){
+    .stage{padding:14px}
+    .meta{display:none}
+    .control{padding:10px}
+  }
+
 </style>
 </head>
-
 <body>
 
-<div id="viewerWrapper">
-  <div id="flipbook"></div>
+<div class="stage">
+  <div class="viewer-card" id="viewer">
+    <div class="topbar">
+      <div class="label page-indicator" id="pageIndicator">Loading...</div>
+      <div class="label" id="fileLabel">book.pdf</div>
+    </div>
+
+    <div id="flipbook"></div>
+
+    <button class="control" id="prevBtn" aria-label="Previous page">◀</button>
+    <button class="control" id="nextBtn" aria-label="Next page">▶</button>
+
+    <div class="loader" id="loader" aria-hidden="true">Rendering pages…</div>
+  </div>
+
+  <!-- Optional side meta column (hidden on narrow screens) -->
+  <aside class="meta" aria-hidden="true">
+    <div style="font-weight:600;color:#fff;">Flipbook controls</div>
+    <div>Use ◀ ▶ or ← → keys to navigate. Pinch/zoom and double-click are supported by some browsers.</div>
+    <div style="font-size:13px;color:var(--muted);">Rendered at device pixel ratio for crisp text.</div>
+  </aside>
 </div>
 
-<button id="prevBtn">◀ Prev</button>
-<button id="nextBtn">Next ▶</button>
-
-<!-- Offline Libraries -->
+<!-- Offline libraries (keep these offline files in libs/) -->
 <script src="libs/jquery.min.js"></script>
 <script src="libs/pdf.js"></script>
 <script src="libs/turn.min.js"></script>
 
 <script>
 const PDF_URL = 'pdf/book.pdf';
-
 const flipbook = $('#flipbook');
 let pdfDoc = null;
 let pageAspect = 1;
+let currentPage = 1;
 
+// Tell pdfjs where its worker is located (relative path)
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'libs/pdf.worker.js';
 
-function isPortrait() {
-  return window.innerHeight > window.innerWidth;
+function computeFit(maxW, maxH) {
+  // FULL-SCREEN priority: use full height, scale width by aspect
+  const targetH = maxH;
+  const targetW = targetH * pageAspect;
+
+  // If width exceeds container, fallback to width-based fit
+  if (targetW > maxW) {
+    const w = maxW;
+    const h = w / pageAspect;
+    return { w: Math.round(w), h: Math.round(h) };
+  }
+  return { w: Math.round(targetW), h: Math.round(targetH) };
 }
 
-function computeLayout() {
-  const height = window.innerHeight * 0.96; // FULL HEIGHT
-  let width;
+function initTurn(width, height) {
+  // Destroy if already inited
+  if (flipbook.data('turn')) flipbook.turn('destroy');
 
-  if (isPortrait()) {
-    width = height * pageAspect;
-    return { width, height, display: 'single' };
-  } else {
-    width = height * pageAspect * 2;
-    return { width, height, display: 'double' };
-  }
-}
-
-function initTurn(layout) {
-  if (flipbook.data('turn')) {
-    flipbook.turn('destroy');
-  }
-
+  flipbook.css({width: width + 'px', height: height + 'px'});
   flipbook.turn({
-    width: layout.width,
-    height: layout.height,
-    display: layout.display,
+    width, height,
     autoCenter: true,
-    duration: 600,
+    display: 'single', // ALWAYS single page view
+    duration: 500,
     gradients: true,
     acceleration: true
   });
 }
 
-pdfjsLib.getDocument(PDF_URL).promise.then(async pdf => {
-  pdfDoc = pdf;
+function updateIndicator() {
+  $('#pageIndicator').text(currentPage + ' / ' + (pdfDoc ? pdfDoc.numPages : '?'));
+}
 
-  const firstPage = await pdf.getPage(1);
-  const viewport = firstPage.getViewport({ scale: 1 });
-  pageAspect = viewport.width / viewport.height;
+async function renderAllPages() {
+  $('#loader').show();
+  flipbook.empty();
 
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const pageDiv = document.createElement('div');
-    pageDiv.className = 'page';
+  const viewport1 = (await pdfDoc.getPage(1)).getViewport({scale:1});
+  pageAspect = viewport1.width / viewport1.height;
+
+  // compute available space inside viewer card (with small padding)
+  const card = document.getElementById('viewer');
+  const style = getComputedStyle(card);
+  const pad = 0; // FULL SCREEN – no inner padding // internal padding
+  const maxW = card.clientWidth;
+  const maxH = card.clientHeight;
+  const fit = computeFit(maxW, maxH);
+
+  // Render each page into a canvas sized for the computed fit (but high DPI)
+  for (let i = 1; i <= pdfDoc.numPages; i++){
+    const page = await pdfDoc.getPage(i);
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'page';
+    wrapper.style.width = fit.w + 'px';
+    wrapper.style.height = fit.h + 'px';
 
     const canvas = document.createElement('canvas');
-    pageDiv.appendChild(canvas);
-    flipbook.append(pageDiv);
+    canvas.style.width = fit.w + 'px';
+    canvas.style.height = fit.h + 'px';
 
-    pdf.getPage(i).then(page => {
-      const scale = window.devicePixelRatio * 2;
-      const vp = page.getViewport({ scale });
+    const context = canvas.getContext('2d');
 
-      canvas.width = vp.width;
-      canvas.height = vp.height;
+    // choose a render scale so the canvas has enough device pixels
+    const devicePR = window.devicePixelRatio || 1;
+    const viewport = page.getViewport({scale:1});
+    const scale = (fit.w * devicePR) / viewport.width;
+    const vp = page.getViewport({scale});
 
-      page.render({
-        canvasContext: canvas.getContext('2d'),
-        viewport: vp
-      });
-    });
+    canvas.width = Math.round(vp.width);
+    canvas.height = Math.round(vp.height);
+
+    // white bg for PDF page
+    context.fillStyle = '#ffffff';
+    context.fillRect(0,0,canvas.width,canvas.height);
+
+    await page.render({canvasContext: context, viewport: vp}).promise;
+
+    wrapper.appendChild(canvas);
+    flipbook.append(wrapper);
   }
 
+  // Ensure even number of pages for turn.js
   if (flipbook.children().length % 2 !== 0) {
-    flipbook.append('<div class="page"></div>');
+    const blank = document.createElement('div');
+    blank.className = 'page';
+    blank.style.width = fit.w + 'px';
+    blank.style.height = fit.h + 'px';
+    flipbook.append(blank);
   }
 
-  initTurn(computeLayout());
+  initTurn(fit.w, fit.h);
+  $('#loader').hide();
+  updateIndicator();
+}
+
+// Load the PDF
+pdfjsLib.getDocument(PDF_URL).promise.then(async pdf => {
+  pdfDoc = pdf;
+  await renderAllPages();
+
+  // start on page 1
+  currentPage = 1;
+  flipbook.turn('page', currentPage);
+}).catch(err => {
+  $('#loader').text('Failed to load PDF');
+  console.error(err);
 });
 
-window.addEventListener('resize', () => {
-  if (!pdfDoc) return;
-  initTurn(computeLayout());
+// Navigation
+$('#prevBtn').on('click', () => {
+  flipbook.turn('previous');
+});
+$('#nextBtn').on('click', () => {
+  flipbook.turn('next');
 });
 
-document.getElementById('prevBtn').onclick = () => flipbook.turn('previous');
-document.getElementById('nextBtn').onclick = () => flipbook.turn('next');
-
+// Keyboard nav
 window.addEventListener('keydown', e => {
   if (e.key === 'ArrowLeft') flipbook.turn('previous');
   if (e.key === 'ArrowRight') flipbook.turn('next');
 });
-</script>
 
+// Update current page index when flipping
+flipbook.on('turned', function(e, page) {
+  currentPage = page;
+  updateIndicator();
+});
+
+// Re-render on resize (debounced)
+let resizeTimeout;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimeout);
+  resizeTimeout = setTimeout(() => {
+    if (!pdfDoc) return;
+    renderAllPages();
+  }, 220);
+});
+
+</script>
 </body>
 </html>
-
